@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: StudyJob
+#studyjobに関する設定ファイル
+
+metadata:
+#metadataに関する情報を指定
+  namespace: kubeflow
+  #podの名前
+  labels:
+  #podに付与するラベル
+    controller-tools.k8s.io: "1.0"
+  name: random-example
+spec:
+  studyName: pytorch_example
+  owner: crd
+  optimizationtype: maximize
+  objectivevaluename: Validation-accuracy
+  optimizationgoal: 0.99
+  requestcount: 4
+  metricsnames:
+    - accuracy
+  parameterconfigs:
+    - name: --lr
+      parametertype: double
+      feasible:
+        min: "0.01"
+        max: "0.03"
+    - name: --num-layers
+      parametertype: int
+      feasible:
+        min: "2"
+        max: "5"
+    - name: --optimizer
+      parametertype: categorical
+      feasible:
+        list:
+        - sgd
+        - adam
+        - ftrl
+  workerSpec:
+    goTemplate:
+        rawTemplate: |-
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: {{.WorkerID}}
+            namespace: kubeflow
+          spec:
+            template:
+              spec:
+	      #kubernetessではコンテナをpodという単位で管理する.そのため、コンテナを実行するにはまずPodを作成する必要がある
+                containers:
+                - name: pytorch
+		#コンテナ名を指定
+		  image: katib/pytorch
+		  #コンテナを作成する際に使用するイメージを指定, gpuが積まれている場合は最後に,:gpu
+                  command:
+                  - "python"
+                  - "train_mnist.py"
+        	  {{- with .HyperParameters}}
+                  {{- range .}}
+                  - "{{.Name}}={{.Value}}"
+                  {{- end}}
+                  {{- end}}
+                restartPolicy: Never
+  suggestionSpec:
+    suggestionAlgorithm: "random"
+    requestNumber: 3
